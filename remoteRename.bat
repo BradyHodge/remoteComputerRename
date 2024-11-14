@@ -1,12 +1,13 @@
 @echo off
 setlocal EnableDelayedExpansion
-
-echo Rename a computer remotely and then force restart it.
+:start
 echo.
-echo Made by Brady Hodge
-echo V 1.6.5
+echo ==============================================
+echo Rename a computer remotely and force restart
+echo Brady Hodge
+echo V 1.8.2
+echo ==============================================
 echo.
-
 :getOldName
 set /p oldName="Enter the current computer name: "
 if "!oldName!"=="" (
@@ -22,31 +23,74 @@ if "!newName!"=="" (
 )
 
 :getDomainAdmin
-set /p domainAdmin="Enter domain admin username: "
-if "!domainAdmin!"=="" (
+set /p guruUser="Enter your guru username: "
+if "!guruUser!"=="" (
     echo Domain admin username cannot be empty
     goto getDomainAdmin
 )
+set domain=byui
+set domainAdmin=!domain!\!guruUser!
 
+:confirmComputerInfo
 echo.
 echo Please confirm the following details:
 echo Current Computer Name: !oldName!
 echo New Computer Name: !newName!
 echo Domain Admin: !domainAdmin!
 echo.
-
-:confirm
 set /p confirm="Is this correct? (Y/N): "
 if /i "!confirm!"=="Y" (
-    goto execute
+    goto checkName
 ) else if /i "!confirm!"=="N" (
-    echo.
-    echo Let's start over.
-    echo.
-    goto getOldName
+    goto start
 ) else (
     echo Please enter Y or N
-    goto confirm
+    goto confirmComputerInfo
+)
+
+:checkName
+where dsquery >nul 2>&1
+if %errorlevel% NEQ 0 (
+    echo RSAT is not installed on this computer.
+    echo Make sure to manually check that the name !newName! is not already in use.
+    goto checkHost
+)
+
+for /f "tokens=*" %%A in ('dsquery computer -name "!newName!" 2^>nul') do (
+    set "adResult=%%A"
+)
+
+if defined adResult (
+    echo The computer "!newName!" is already in active directory.
+    :askIgnoreADCheck
+    set /p ignoreADCheck="Would you like to continue anyway? (Y/N): "
+    if /i "!ignoreADCheck!" == "N" (
+        goto confirmComputerInfo
+    ) else if /i "!ignoreADCheck!" == "Y" (
+        goto checkHost
+    ) else (
+        echo Please enter Y or N
+        goto askIgnoreADCheck
+    )
+) else (
+    goto checkHost
+)
+
+
+:checkHost
+ping -n 1 !oldName! >nul
+if not !errorlevel! EQU 0 (
+    echo Remote computer is not responding.
+    :askIgnorePing
+    set /p ignorePing="Would you like to continue anyway? (Y/N): "
+    if /i "!ignorePing!" == "N" (
+        goto confirmComputerInfo
+    ) else if /i "!ignorePing!" == "Y" (
+        goto execute
+    ) else (
+        echo Please enter Y or N
+        goto askIgnorePing
+    )
 )
 
 :execute
@@ -58,4 +102,15 @@ if errorlevel 1 (
     echo The computer will restart automatically.
 )
 
-pause
+:askExit
+    set /p exit="Would you like to exit the program? (Y/N): "
+    if /i "!exit!" == "N" (
+        goto start
+    ) else if /i "!exit!" == "Y" (
+        goto end
+    ) else (
+        echo Please enter Y or N
+        goto askExit
+    )
+:end
+endlocal
